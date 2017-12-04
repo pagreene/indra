@@ -256,7 +256,7 @@ def upload_springer(springer_dir, verbose=False, since_date=None):
 if __name__ == "__main__":
     # TODO: we should probably support reading from a different
     # directory.
-    record_file = 'last_update.txt'
+    record_file = path.join(path.dirname(path.abspath(__file__)), 'last_update.txt')
     if path.exists(record_file):
         with open(record_file, 'r') as f:
             last_update = datetime.fromtimestamp(f.read())
