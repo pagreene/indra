@@ -13,7 +13,7 @@ from indra.util import UnicodeXMLTreeBuilder as UTB
 from os import path, walk, remove
 from subprocess import call
 from collections import namedtuple
-from indra.db import get_primary_db
+from indra.db import get_primary_db, texttypes, formats
 from indra.util import zip_string
 
 try:
@@ -21,9 +21,6 @@ try:
 except:
     basestring = str
 
-RE_PATT_TYPE = type(re.compile(''))
-# TODO: finish this
-SP_INFO = namedtuple('springer_info', ('File', 'date'))
 
 # TODO: This might do better in util, or somewhere more gnereal ===============
 def deep_find(top_dir, patt, since_date=None, verbose=False):
@@ -236,32 +233,23 @@ def upload_springer(springer_dir, verbose=False, since_date=None):
             text_ref_id = tr_list[0].id
             vprint("Found existing" + suf % text_ref_id)
 
-        full_content = process_one_pdf(pdf_path, txt_path, do_zip=False)
-        db.insert(
-            'text_content',
-            text_ref_id=text_ref_id,
-            source='Springer',
-            format='fulltext',
-            text_type='pdftotext',
-            content=full_content.encode('utf8')
-            )
+        full_content = process_one_pdf(pdf_path, txt_path, do_zip=True)
+        content_list.append((text_ref_id, 'Springer', formats.TEXT, 
+                             texttypes.FULLTEXT, full_content.encode('utf8')))
 
         abst_data = xml_data['abst_data']
         if abst_data['abstract'] is not None:
             abst_content = zip_abstract(abst_data['abstract'], abst_data['title'])
             # TODO: Check if the abstract is already there.
             if len(tr_list) is 0:
-                db.insert(
-                    'text_content',
-                    text_ref_id=text_ref_id,
-                    source='Springer',
-                    format='abstract',
-                    text_type='xmltotext',
-                    content=abst_content
-                    )
+                content_list.append((text_ref_id, 'Springer', formats.ABSTRACT,
+                                     texttypes.ABSTRACT, abst_content))
 
         uploaded.append({'path': pdf_path, 'doi': ref_data['doi']})
         vprint("Finished Processing...")
+
+    db.copy('text_content', content_list,
+            ('text_ref_id', 'source', 'format', 'text_type', 'content'))
     return uploaded
 
 
