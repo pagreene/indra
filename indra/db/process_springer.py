@@ -21,6 +21,7 @@ try:
 except:
     basestring = str
 
+RE_PATT_TYPE = type(re.compile(''))
 
 # TODO: This might do better in util, or somewhere more gnereal ===============
 def deep_find(top_dir, patt, since_date=None, verbose=False):
@@ -172,7 +173,8 @@ def pdf_is_worth_uploading(ref_data):
     return ref_data['pmid'] is not None or ref_data['pmcid'] is not None
 
 
-def upload_springer(springer_dir, verbose=False, since_date=None):
+def upload_springer(springer_dir, verbose=False, since_date=None,
+                    batch_size=1000, db=None):
     '''Convert the pdfs to text and upload data to AWS
 
     Note: Currently does nothing.
@@ -191,8 +193,15 @@ def upload_springer(springer_dir, verbose=False, since_date=None):
         since_date=since_date
         )
     # TODO: cache the result of the search
+    if db is None:
+        db = get_primary_db()
+    db.grab_session()
+    copy_cols = ('text_ref_id', 'source', 'format', 'text_type', 'content')
+
+    added = []
     vprint("Found PDF`s. Now entering loop.")
-    for pdf_path in match_list:
+    content_list = []
+    for i, pdf_path in enumerate(match_list):
         vprint("Examining %s" % pdf_path)
         xml_data = get_xml_data(
             pdf_path,
@@ -220,9 +229,6 @@ def upload_springer(springer_dir, verbose=False, since_date=None):
             continue
         vprint("Processing...")
 
-        db = get_primary_db()
-        db.grab_session()
-
         # For now pmid's are the primary ID, so that should be the primary
         tr_list = db.select_all('text_ref', db.TextRef.pmid == ref_data['pmid'])
         suf = " text ref %%s for pmid: %s, and doi: %s." % (ref_data['pmid'], ref_data['doi'])
@@ -245,11 +251,20 @@ def upload_springer(springer_dir, verbose=False, since_date=None):
                 content_list.append((text_ref_id, 'Springer', formats.ABSTRACT,
                                      texttypes.ABSTRACT, abst_content))
 
-        uploaded.append({'path': pdf_path, 'doi': ref_data['doi']})
+        added.append({'path': pdf_path, 'doi': ref_data['doi']})
+        if (i+1) % batch_size is 0:
+            print('Uploading batch %d/%d' % (i+1, len(match_list)//batch_size))
+            db.copy('text_content', content_list, copy_cols)
+            uploaded += added
+            content_list = []
+            added = []
+
         vprint("Finished Processing...")
 
-    db.copy('text_content', content_list,
-            ('text_ref_id', 'source', 'format', 'text_type', 'content'))
+    if len(content_list) > 0:
+        print('Uploading the %d remaining content.' % len(content_list))
+        db.copy('text_content', content_list, copy_cols)
+        uploaded += added
     return uploaded
 
 
