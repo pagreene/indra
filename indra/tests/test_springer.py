@@ -3,7 +3,7 @@ from builtins import dict, str
 
 import re
 
-from indra.tools.reading import process_springer as ps
+from indra.db import process_springer as ps
 from os.path import exists, dirname, join, realpath, basename
 from time import sleep
 from datetime import datetime
@@ -135,9 +135,9 @@ def test_upload():
         # Upload the test documents.
         uploads = ps.upload_springer(
             TOP_DIR,
-            host=TEST_DB_HOST,
-            sqltype='sqlite',
-            verbose=True)
+            db=db,
+            verbose=True,
+            batch_size=3)
         art_patt = re.compile('.*?(ART.*?).BodyRef.*?')
         uploads_arts = set()
         for upload in uploads:
