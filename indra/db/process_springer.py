@@ -57,7 +57,7 @@ def deep_find(top_dir, patt, since_date=None, verbose=False):
     matches = []
     try:
         for root, dirnames, filenames in walk(top_dir):
-            if verbose:
+            if verbose and path.dirname(root)==top_dir:
                 print("Looking in %s." % root)
             # Check if the directory has been modified recently. Note that removing
             # a dirpath from dirnames will prevent walk from going into that dir.
