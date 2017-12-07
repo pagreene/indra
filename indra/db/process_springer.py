@@ -25,7 +25,7 @@ except:
 RE_PATT_TYPE = type(re.compile(''))
 
 # TODO: This might do better in util, or somewhere more gnereal ===============
-def deep_find(top_dir, patt, since_date=None, verbose=False):
+def deep_find(top_dir, patt, since_date=None, verbose=False, skip_dirs=None):
     '''Find files that match `patt` recursively down from `top_dir`
 
     Note: patt may be a regex string or a regex pattern object.
@@ -48,6 +48,9 @@ def deep_find(top_dir, patt, since_date=None, verbose=False):
     def desired_dirs(dirpath):
         if since_date is not None:
             if not is_after_time(since_date, dirpath):
+                return False
+        if skip_dirs is not None:
+            if path.basename(dirpath) in skip_dirs:
                 return False
         return True
 
@@ -191,13 +194,23 @@ def upload_springer(springer_dir, verbose=False, since_date=None,
     else:
         vprint = lambda x: None
     vprint("Looking for PDF`s.")
+    if path.exists('pdf_list.pkl'):
+        with open('pdf_list.pkl', 'rb') as f:
+            old_pdf_list = pickle.load(f)
+    else:
+        old_pdf_list = []
+    done_dirs = set([pdf_path[42:].split('/')[0] for pdf_path in old_pdf_list])
     match_list = deep_find(
         springer_dir, 
         '.*?\.pdf', 
         verbose=verbose,
-        since_date=since_date
+        since_date=since_date,
+        skip_dirs=done_dirs
         )
-    # TODO: cache the result of the search
+    match_list += old_pdf_list
+    with open('pdf_list.pkl', 'wb') as f:
+        pickle.dump(match_list, f)
+
     if db is None:
         db = get_primary_db()
     db.grab_session()
