@@ -3,6 +3,7 @@ from builtins import dict, str
 import re
 import shutil
 import gzip
+import pickle
 from indra.literature import id_lookup, pubmed_client
 from datetime import datetime
 #try:
@@ -54,16 +55,20 @@ def deep_find(top_dir, patt, since_date=None, verbose=False):
         return [path.join(root, leaf) for leaf in leaves]
 
     matches = []
-    for root, dirnames, filenames in walk(top_dir):
-        if verbose:
-            print("Looking in %s." % root)
-        # Check if the directory has been modified recently. Note that removing
-        # a dirpath from dirnames will prevent walk from going into that dir.
-        if since_date is not None:
-            for dirpath in filter(desired_dirs, complete(root, dirnames)):
-                dirnames.remove(dirpath)
-        for filepath in filter(desired_files, complete(root, filenames)):
-            matches.append(filepath)
+    try:
+        for root, dirnames, filenames in walk(top_dir):
+            if verbose:
+                print("Looking in %s." % root)
+            # Check if the directory has been modified recently. Note that removing
+            # a dirpath from dirnames will prevent walk from going into that dir.
+            if since_date is not None:
+                for dirpath in filter(desired_dirs, complete(root, dirnames)):
+                    dirnames.remove(dirpath)
+            for filepath in filter(desired_files, complete(root, filenames)):
+                matches.append(filepath)
+    except:  # We want this to catch literally everything.
+        print("Caught exception. Returning what we have so far.")
+
     return matches
 
 
@@ -199,7 +204,7 @@ def upload_springer(springer_dir, verbose=False, since_date=None,
     copy_cols = ('text_ref_id', 'source', 'format', 'text_type', 'content')
 
     added = []
-    vprint("Found PDF`s. Now entering loop.")
+    vprint("Found %d PDF`s. Now entering loop." % len(match_list))
     content_list = []
     for i, pdf_path in enumerate(match_list):
         vprint("Examining %s" % pdf_path)
@@ -274,12 +279,15 @@ if __name__ == "__main__":
     record_file = path.join(path.dirname(path.abspath(__file__)), 'last_update.txt')
     if path.exists(record_file):
         with open(record_file, 'r') as f:
-            last_update = datetime.fromtimestamp(f.read())
+            last_update = datetime.fromtimestamp(float(f.read()))
     else:
         last_update = None
 
-    default_dir = '/groups/lsp/darpa/springer/content/data'
-    upload_springer(default_dir, verbose=True, since_date=last_update)
+    default_dir = '/n/groups/lsp/darpa/springer/content/data'
+    uploaded = upload_springer(default_dir, verbose=True, since_date=last_update)
+    print("Uploaded %d papers." % len(uploaded))
 
+    tstamp = datetime.now().timestamp()
+    print("Completing with timestamp: %f" % tstamp)
     with open(record_file, 'w') as f:
-        f.write(datetime.now().timestamp())
+        f.write(str(datetime.now().timestamp()))
