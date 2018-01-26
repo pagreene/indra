@@ -498,7 +498,7 @@ class ReachReader(Reader):
                     logger.error("Nothing was read by REACH. The following "
                                  "files could not be read: %s"
                                  % str(remaining))
-                    raise e_now
+                    raise err_list[-1]
                 else:
                     logger.info("Succeeded in running reach after %d retries."
                                 % num_tries)
