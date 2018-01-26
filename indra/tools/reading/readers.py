@@ -474,6 +474,8 @@ class ReachReader(Reader):
                 return partial_ret, remaining
 
             try:
+                logger.info("Starting reach reading %d entires."
+                            % len(read_list))
                 run_reach()
             except ReachError as e_first:
                 num_tries = 1
@@ -481,6 +483,8 @@ class ReachReader(Reader):
                 partial_ret, remaining = prep_retry()
                 ret = partial_ret[:]
                 while len(partial_ret) and len(remaining):
+                    logger.info("Retry %d. %d content entries remaining."
+                                % (num_tries, len(remaining)))
                     try:
                         num_tries += 1
                         run_reach()
