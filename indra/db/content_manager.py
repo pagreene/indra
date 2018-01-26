@@ -206,11 +206,19 @@ class NihFtpClient(object):
                 buf.flush()
         return
 
-    def download_file(self, f_path, dest=None):
+    def download_file(self, f_path, dest=None, name=None):
         "Download a file into a file given by f_path."
-        name = path.basename(f_path)
+        if name is None:
+            name = path.basename(f_path)
+        elif not name.endswith(f_path.split('.')[-1]):
+            name += f_path.split('.')[-1]
         if dest is not None:
             name = path.join(dest, name)
+        num_suffix_fmt = name + '_%d'
+        n = 1
+        while path.exists(name):
+            name = num_suffix_fmt % n
+            n += 1
         with open(name, 'wb') as gzf:
             self.ret_file(f_path, gzf)
         return name

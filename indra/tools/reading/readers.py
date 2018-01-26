@@ -412,14 +412,19 @@ class ReachReader(Reader):
             logger.debug('Joined files for prefix %s.' % base_prefix)
         return reading_data_list
 
-    def clear_input(self):
+    def clear_input(self, prefix_list=None):
         """Remove all the input files (at the end of a reading)."""
+        remaining = []
         for item in listdir(self.input_dir):
+            if prefix_list is not None \
+               and not any([str(pfx) in item for pfx in prefix_list]):
+                remaining.append(item)
+                continue
             item_path = path.join(self.input_dir, item)
             if path.isfile(item_path):
                 remove(item_path)
                 logger.debug('Removed input %s.' % item_path)
-        return
+        return remaining
 
     def read(self, read_list, verbose=False, log=False):
         """Read the content, returning a list of ReadingData objects."""
@@ -441,24 +446,58 @@ class ReachReader(Reader):
                 '-Dconfig.file=%s' % self.conf_file_path,
                 '-jar', self.exec_path
                 ]
-            p = subprocess.Popen(args, stdout=subprocess.PIPE,
-                                 stderr=subprocess.PIPE)
-            log_file_str = ''
-            for line in iter(p.stdout.readline, b''):
-                log_line = 'REACH: ' + line.strip().decode('utf8')
-                if verbose:
-                    logger.info(log_line)
+
+            def run_reach():
+                p = subprocess.Popen(args, stdout=subprocess.PIPE,
+                                     stderr=subprocess.PIPE)
+                log_file_str = ''
+                for line in iter(p.stdout.readline, b''):
+                    log_line = 'REACH: ' + line.strip().decode('utf8')
+                    if verbose:
+                        logger.info(log_line)
+                    if log:
+                        log_file_str += log_line + '\n'
                 if log:
-                    log_file_str += log_line + '\n'
-            if log:
-                with open('reach_run.log', 'ab') as f:
-                    f.write(log_file_str.encode('utf8'))
-            p_out, p_err = p.communicate()
-            if p.returncode:
-                logger.error('Problem running REACH:')
-                logger.error('Stdout: %s' % p_out.decode('utf-8'))
-                logger.error('Stderr: %s' % p_err.decode('utf-8'))
-                raise ReachError("Problem running REACH")
+                    with open('reach_run.log', 'ab') as f:
+                        f.write(log_file_str.encode('utf8'))
+                p_out, p_err = p.communicate()
+                if p.returncode:
+                    logger.error('Problem running REACH:')
+                    logger.error('Stdout: %s' % p_out.decode('utf-8'))
+                    logger.error('Stderr: %s' % p_err.decode('utf-8'))
+                    raise ReachError("Problem running REACH")
+
+            def prep_retry():
+                partial_ret = self.get_output()
+                completed_prefix_list = [rd.tcid for rd in partial_ret]
+                remaining = self.clear_input(completed_prefix_list)
+                return partial_ret, remaining
+
+            try:
+                run_reach()
+            except ReachError as e_first:
+                num_tries = 1
+                err_list = [e_first]
+                partial_ret, remaining = prep_retry()
+                ret = partial_ret[:]
+                while len(partial_ret) and len(remaining):
+                    try:
+                        num_tries += 1
+                        run_reach()
+                    except ReachError as e_now:
+                        partial_ret, remaining = prep_retry()
+                        ret += partial_ret
+                        err_list.append(e_now)
+                        continue
+                    break
+                if not len(partial_ret) and len(remaining):
+                    logger.error("Nothing was read by REACH. The following "
+                                 "files could not be read: %s"
+                                 % str(remaining))
+                    raise e_now
+                else:
+                    logger.info("Succeeded in running reach after %d retries."
+                                % num_tries)
             logger.info("Reach finished.")
             ret = self.get_output()
             self.clear_input()

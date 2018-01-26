@@ -58,7 +58,6 @@ def read_and_process(fpath_list, input_type, readers, dirname):
     return
 
 
-
 def run_benchmark(num_samples, n_proc):
     pmc = PmcOA()
     print("Loading list of pdfs...")
@@ -78,7 +77,7 @@ def run_benchmark(num_samples, n_proc):
         pmcid_dir = path.join(dirname, pmcid)
         mkdir(pmcid_dir)
         print("Loading sample with pmcid: %s." % pmcid)
-        fpath = pmc.ftp.download_file(oa_file_dict[pmcid], pmcid_dir)
+        fpath = pmc.ftp.download_file(oa_file_dict[pmcid], pmcid_dir, pmcid)
         print("Saved to: %s" % fpath)
         xml_path, pdf_path = extract(fpath, pmcid_dir)
         print("Converting pdf to text...")
@@ -94,6 +93,7 @@ def run_benchmark(num_samples, n_proc):
     for input_type in ['xml', 'txt']:
         read_and_process(fpath_dict[input_type], input_type, readers, dirname)
     return group_list
+
 
 if __name__ == '__main__':
     num_samples = int(sys.argv[1])
