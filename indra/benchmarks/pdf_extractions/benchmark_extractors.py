@@ -43,7 +43,7 @@ def extract(fpath, dirname):
 
 def read_and_process(fpath_list, input_type, readers, dirname):
     print("Reading %s." % input_type)
-    readings = read_files(fpath_list, readers, verbose=True, log=True)
+    readings = read_files(fpath_list, readers, verbose=True, log=True, failure_ok=True)
     print("Got %d readings." % len(readings))
     reading_out_path = path.join(dirname, 'readings_%s.pkl' % input_type)
     with open(reading_out_path, 'wb') as f:

@@ -426,7 +426,7 @@ class ReachReader(Reader):
                 logger.debug('Removed input %s.' % item_path)
         return remaining
 
-    def read(self, read_list, verbose=False, log=False):
+    def read(self, read_list, verbose=False, log=False, failure_ok=False):
         """Read the content, returning a list of ReadingData objects."""
         ret = []
         mem_tot = _get_mem_total()
@@ -477,6 +477,8 @@ class ReachReader(Reader):
                 logger.info("Starting reach reading %d entires."
                             % len(read_list))
                 run_reach()
+                ret = self.get_output()
+                self.clear_input()
             except ReachError as e_first:
                 num_tries = 1
                 err_list = [e_first]
@@ -493,18 +495,18 @@ class ReachReader(Reader):
                         ret += partial_ret
                         err_list.append(e_now)
                         continue
+                    ret += self.get_output()
+                    self.clear_input()
+                    logger.info("Succeeded in running reach after %d retries."
+                                % num_tries)
                     break
-                if not len(partial_ret) and len(remaining):
+                else:
                     logger.error("Nothing was read by REACH. The following "
                                  "files could not be read: %s"
                                  % str(remaining))
-                    raise err_list[-1]
-                else:
-                    logger.info("Succeeded in running reach after %d retries."
-                                % num_tries)
+                    if not failure_ok:
+                        raise err_list[-1]
             logger.info("Reach finished.")
-            ret = self.get_output()
-            self.clear_input()
         return ret
 
 
@@ -624,7 +626,8 @@ class SparserReader(Reader):
                 outpath_list.append(output)
         return outpath_list, outbuf
 
-    def read(self, read_list, verbose=False, log=False, n_per_proc=None):
+    def read(self, read_list, verbose=False, log=False, failure_ok=False,
+             n_per_proc=None):
         "Perform the actual reading."
         ret = []
         self.prep_input(read_list)
