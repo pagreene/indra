@@ -211,7 +211,7 @@ class NihFtpClient(object):
         if name is None:
             name = path.basename(f_path)
         elif not name.endswith(f_path.split('.')[-1]):
-            name += f_path.split('.')[-1]
+            name += '.' + f_path.split('.')[-1]
         if dest is not None:
             name = path.join(dest, name)
         num_suffix_fmt = name + '_%d'

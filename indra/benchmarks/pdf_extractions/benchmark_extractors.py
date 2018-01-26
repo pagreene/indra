@@ -26,7 +26,7 @@ def pdftotext(pdf_file_path, txt_file_path=None):
     return txt_file_path
 
 
-def extract(fpath, dirname):
+def extract(fpath, dirname, pmcid):
     with tarfile.open(fpath, 'r:gz') as tar:
         mems = tar.getmembers()
         xml_mem = [m for m in mems if m.name.endswith('.nxml')][0]
@@ -34,7 +34,7 @@ def extract(fpath, dirname):
         fpaths = []
         for mem in [xml_mem, pdf_mem]:
             s = tar.extractfile(mem).read()
-            fpath = path.join(dirname, path.basename(mem.name))
+            fpath = path.join(dirname, pmcid + '.' + mem.name.split('.')[-1])
             with open(fpath, 'wb') as f:
                 f.write(s)
             fpaths.append(fpath)
@@ -79,7 +79,7 @@ def run_benchmark(num_samples, n_proc):
         print("Loading sample with pmcid: %s." % pmcid)
         fpath = pmc.ftp.download_file(oa_file_dict[pmcid], pmcid_dir, pmcid)
         print("Saved to: %s" % fpath)
-        xml_path, pdf_path = extract(fpath, pmcid_dir)
+        xml_path, pdf_path = extract(fpath, pmcid_dir, pmcid)
         print("Converting pdf to text...")
         txt_path = pdftotext(pdf_path)
         group_list.append((xml_path, txt_path))
