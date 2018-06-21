@@ -203,9 +203,10 @@ class BoundCondition(object):
         self.is_bound = is_bound
 
     def matches(self, other):
-        return (self.matches_key() == other.matches_key())
+        return self.matches_key() == other.matches_key()
 
     def matches_key(self):
+        # FIXME: below should be self.agent.matches_key()
         key = (self.agent.matches_key, self.is_bound)
         return str(key)
 
@@ -562,11 +563,11 @@ class Concept(object):
 
     def get_grounding(self):
         # Prioritize anything that is other than TEXT
-        db_names = sorted(list(set(self.db_refs.keys()) - set(['TEXT'])))
+        db_names = sorted(list(set(self.db_refs.keys()) - {'TEXT'}))
         db_ns = db_names[0] if db_names else None
         db_id = self.db_refs[db_ns] if db_ns else None
         if db_ns == 'BBN' and db_id in ('Factor', 'Entities/Factor'):
-            return (None, None)
+            return None, None
         # If the db_id is actually a list of scored groundings, we take the
         # highest scoring one.
         if isinstance(db_id, list):
@@ -604,7 +605,7 @@ class Concept(object):
         return True
 
     def to_json(self):
-        json_dict = _o({'name': self.name})
+        json_dict = _o({'name': self.name, 'class': self.__class__.__name__})
         json_dict['db_refs'] = self.db_refs
         return json_dict
 
@@ -619,7 +620,7 @@ class Concept(object):
         return concept
 
     def __str__(self):
-        return self.name
+        return '%s(%s)' % (self.__class__.__name__, self.name)
 
     def __repr__(self):
         return str(self)
@@ -1109,16 +1110,6 @@ class Statement(object):
             ret = self.shallow_hash
         return ret
 
-    def agent_list_with_bound_condition_agents(self):
-        # Returns the list of agents both directly participating in the
-        # statement and referenced through bound conditions.
-        l = self.agent_list()
-        for a in self.agent_list():
-            if a is not None:
-                bc_agents = [bc.agent for bc in a.bound_conditions]
-                l.extend(bc_agents)
-        return l
-
     def entities_match(self, other):
         self_key = self.entities_match_key()
         other_key = other.entities_match_key()
@@ -1170,6 +1161,7 @@ class Statement(object):
         return True
 
     def contradicts(self, other, hierarchies):
+        # Perhaps this should be NotImplementedError?
         # Placeholder for implementation in subclasses
         return False
 
@@ -1222,6 +1214,75 @@ class Statement(object):
         stmt.uuid = stmt_id
         return stmt
 
+    def make_generic_copy(self, deeply=False):
+        """Make a new matching Statement with no provenance.
+
+        All agents and other attributes besides evidence, belief, supports, and
+        supported_by will be copied over, and a new uuid will be assigned.
+        Thus, the new Statement will satisfy `new_stmt.matches(old_stmt)`.
+
+        If `deeply` is set to True, all the attributes will be deep-copied,
+        which is comparatively slow. Otherwise, attributes of this statement
+        may be altered by changes to the new matching statement.
+        """
+        if deeply:
+            kwargs = deepcopy(self.__dict__)
+        else:
+            kwargs = self.__dict__.copy()
+        for attr in ['evidence', 'belief', 'uuid', 'supports', 'supported_by',
+                     'is_activation']:
+            kwargs.pop(attr, None)
+        for attr in ['hash', 'shallow_hash']:
+            my_hash = kwargs.pop(attr, None)
+            my_shallow_hash = kwargs.pop(attr, None)
+        new_instance = self.__class__(**kwargs)
+        new_instance.hash = my_hash
+        new_instance.shallow_hash = my_shallow_hash
+        return new_instance
+
+    def agent_list(self):
+        """Return a list of the agents."""
+        raise NotImplementedError("Method must be implemented in child class.")
+
+
+@python_2_unicode_compatible
+class CausalRelation(Statement):
+    """Generic statement type for all causal relations."""
+
+    def __init__(self, subj, obj, evidence):
+        self.subj = subj
+        self.obj = obj
+        super(CausalRelation, self).__init__(evidence)
+        return
+
+    def agent_list(self):
+        return [self.subj, self.obj]
+
+    def _matches_key_tuple(self):
+        key = (self.__class__.__name__,)
+        for ag in self.agent_list():
+            if ag is None:
+                key += (None,)
+            elif hasattr(ag, 'matches_key'):
+                key += (ag.matches_key(),)
+        return key
+
+    def matches_key(self):
+        return str(self._matches_key_tuple())
+
+
+@python_2_unicode_compatible
+class BiologicalRelation(CausalRelation):
+    def agent_list_with_bound_condition_agents(self):
+        # Returns the list of agents both directly participating in the
+        # statement and referenced through bound conditions.
+        l = self.agent_list()
+        for a in self.agent_list():
+            if a is not None:
+                bc_agents = [bc.agent for bc in a.bound_conditions]
+                l.extend(bc_agents)
+        return l
+
     def to_graph(self):
         """Return Statement as a networkx graph."""
         import networkx
@@ -1255,7 +1316,7 @@ class Statement(object):
                         graph.add_edge(node_id, sub_id, label=('%s' % k))
             else:
                 if isinstance(element, basestring) and \
-                   element.startswith('http'):
+                        element.startswith('http'):
                     element = element.split('/')[-1]
                 graph.add_node(node_id, label=('%s' % element))
             return node_id
@@ -1264,35 +1325,9 @@ class Statement(object):
         json_node(graph, jd, ['%s' % self.uuid])
         return graph
 
-    def make_generic_copy(self, deeply=False):
-        """Make a new matching Statement with no provenance.
-
-        All agents and other attributes besides evidence, belief, supports, and
-        supported_by will be copied over, and a new uuid will be assigned.
-        Thus, the new Statement will satisfy `new_stmt.matches(old_stmt)`.
-
-        If `deeply` is set to True, all the attributes will be deep-copied,
-        which is comparatively slow. Otherwise, attributes of this statement
-        may be altered by changes to the new matching statement.
-        """
-        if deeply:
-            kwargs = deepcopy(self.__dict__)
-        else:
-            kwargs = self.__dict__.copy()
-        for attr in ['evidence', 'belief', 'uuid', 'supports', 'supported_by',
-                     'is_activation']:
-            kwargs.pop(attr, None)
-        for attr in ['hash', 'shallow_hash']:
-            my_hash = kwargs.pop(attr, None)
-            my_shallow_hash = kwargs.pop(attr, None)
-        new_instance = self.__class__(**kwargs)
-        new_instance.hash = my_hash
-        new_instance.shallow_hash = my_shallow_hash
-        return new_instance
-
 
 @python_2_unicode_compatible
-class Modification(Statement):
+class Modification(BiologicalRelation):
     """Generic statement representing the modification of a protein.
 
     Parameters
@@ -1311,7 +1346,7 @@ class Modification(Statement):
         Evidence objects in support of the modification.
     """
     def __init__(self, enz, sub, residue=None, position=None, evidence=None):
-        super(Modification, self).__init__(evidence)
+        super(Modification, self).__init__(enz, sub, evidence)
         self.enz = enz
         self.sub = sub
         self.residue = get_valid_residue(residue)
@@ -1321,16 +1356,9 @@ class Modification(Statement):
             self.position = position
 
     def matches_key(self):
-        if self.enz is None:
-            enz_key = None
-        else:
-            enz_key = self.enz.matches_key()
-        key = (type(self), enz_key, self.sub.matches_key(),
-               str(self.residue), str(self.position))
+        key = self._matches_key_tuple()
+        key += (str(self.residue), str(self.position))
         return str(key)
-
-    def agent_list(self):
-        return [self.enz, self.sub]
 
     def set_agent_list(self, agent_list):
         if len(agent_list) != 2:
@@ -2582,14 +2610,10 @@ class RegulateAmount(Statement):
         obj_refinement = self.obj.refinement_of(other.obj, hierarchies)
         return (subj_refinement and obj_refinement)
 
-    def equals(self, other):
-        matches = super(RegulateAmount, self).equals(other)
-        return matches
-
     def contradicts(self, other, hierarchies):
         # If they aren't opposite classes, it's not a contradiction
         if {self.__class__, other.__class__} != \
-            {IncreaseAmount, DecreaseAmount}:
+           {IncreaseAmount, DecreaseAmount}:
             return False
         # Skip all instances of not fully specified statements
         agents = (self.subj, self.obj, other.subj, other.obj)
@@ -2645,7 +2669,7 @@ class IncreaseAmount(RegulateAmount):
     pass
 
 
-class Influence(IncreaseAmount):
+class Influence(CausalRelation):
     """An influence on the quantity of a concept of interest.
 
     Parameters
@@ -2706,7 +2730,7 @@ class Influence(IncreaseAmount):
     def equals(self, other):
         def delta_equals(dself, dother):
             if (dself['polarity'] == dother['polarity']) and \
-                (set(dself['adjectives']) == set(dother['adjectives'])):
+               (set(dself['adjectives']) == set(dother['adjectives'])):
                 return True
             else:
                 return False
@@ -2726,8 +2750,8 @@ class Influence(IncreaseAmount):
 
     def contradicts(self, other, hierarchies):
         if self.entities_match(other) or \
-            self.refinement_of(other, hierarchies) or \
-            other.refinement_of(self, hierarchies):
+           self.refinement_of(other, hierarchies) or \
+           other.refinement_of(self, hierarchies):
             sp = self.overall_polarity()
             op = other.overall_polarity()
             if sp and op and sp * op == -1:
@@ -2774,7 +2798,6 @@ class Influence(IncreaseAmount):
             obj = Concept._from_json(obj)
         stmt = cls(subj, obj, subj_delta, obj_delta)
         return stmt
-
 
     def __repr__(self):
         if sys.version_info[0] >= 3:
