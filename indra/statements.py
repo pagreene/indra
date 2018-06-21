@@ -175,6 +175,32 @@ except NameError:  # Python 3
     basestring = str
 
 
+class KnowledgeElement(object):
+    def matches(self, other):
+        return self.matches_key() == other.matches_key()
+
+    def matches_key(self):
+        raise NotImplementedError
+
+    @classmethod
+    def _from_json(cls, json_dict):
+        """Populate an object from JSON dict."""
+        if 'name' in json_dict.keys():
+            if isinstance(cls, BiologicalRelation):
+                return Agent._from_json(json_dict)
+            else:
+                return Concept._from_json(json_dict)
+        elif 'type' in json_dict.keys():
+            return Statement._from_json(json_dict)
+        else:
+            # We cannot
+            raise Exception('Unknown')
+
+    def to_json(self):
+        """Serialize to json."""
+        raise NotImplementedError("Implement in child class.")
+
+
 class BoundCondition(object):
     """Identify Agents bound (or not bound) to a given Agent in a given context.
 
