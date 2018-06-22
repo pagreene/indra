@@ -1294,7 +1294,7 @@ class CausalRelation(Statement):
         return key
 
     def matches_key(self):
-        return str(self._matches_key_tuple())
+        return str(self._matches_key_tuple(), polarity)
 
 
 @python_2_unicode_compatible
@@ -2833,6 +2833,10 @@ class Influence(CausalRelation):
 
     def __str__(self):
         def _influence_concept_str(concept, delta):
+            if hasattr(concept, 'name'):
+                concept_name = concept.name
+            else:
+                concept_name = str(concept)
             if delta is not None:
                 pol = delta.get('polarity')
                 if pol == 1:
@@ -2841,9 +2845,9 @@ class Influence(CausalRelation):
                     pol_str = 'negative'
                 else:
                     pol_str = ''
-                concept_str = '%s(%s)' % (concept.name, pol_str)
+                concept_str = '%s(%s)' % (concept_name, pol_str)
             else:
-                concept_str = concept.name
+                concept_str = concept_name
             return concept_str
         s = ("%s(%s, %s)" % (type(self).__name__,
                              _influence_concept_str(self.subj,
